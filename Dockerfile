@@ -31,5 +31,5 @@ RUN python manage.py collectstatic --noinput
 # Expose port
 EXPOSE $PORT
 
-# Start the application
-CMD python manage.py migrate && gunicorn mangoAPI.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120 --access-logfile - --error-logfile -
+# Start the application with better error handling
+CMD python manage.py migrate && gunicorn mangoAPI.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 1 --timeout 300 --access-logfile - --error-logfile - --log-level info
