@@ -31,5 +31,5 @@ RUN python manage.py collectstatic --noinput
 # Expose port
 EXPOSE $PORT
 
-# Run Django with gunicorn (assuming your main Django project folder is 'mangoAPI')
-CMD gunicorn mangoAPI.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120
+# Start the application
+CMD python manage.py migrate && gunicorn mangoAPI.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120 --access-logfile - --error-logfile -
