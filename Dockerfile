@@ -33,7 +33,7 @@ RUN python manage.py check --deploy
 RUN python manage.py collectstatic --noinput
 
 # Create a simple startup script
-RUN echo '#!/bin/bash\npython manage.py migrate --noinput\necho "Starting gunicorn on port $PORT"\nexec gunicorn mangoAPI.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 300 --log-level info --access-logfile - --error-logfile -' > /app/start.sh
+RUN echo '#!/bin/bash\npython manage.py migrate --noinput\npython manage.py create_superuser\necho "Starting gunicorn on port $PORT"\nexec gunicorn mangoAPI.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 300 --log-level info --access-logfile - --error-logfile -' > /app/start.sh
 RUN chmod +x /app/start.sh
 
 # Expose port
