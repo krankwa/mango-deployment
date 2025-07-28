@@ -20,13 +20,16 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 
 # Copy the rest of the application
 COPY . .
 
+# Collect static files
+RUN python manage.py collectstatic --noinput
+
 # Expose port
 EXPOSE $PORT
 
-# Run the application
-CMD gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+# Run Django with gunicorn (assuming your main Django project folder is 'mangoAPI')
+CMD gunicorn mangoAPI.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120
