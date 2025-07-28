@@ -138,7 +138,7 @@ def classified_images_list(request):
         images = queryset[start:end]
         
         # Serialize data
-        serializer = MangoImageSerializer(images, many=True)
+        serializer = MangoImageSerializer(images, many=True, context={'request': request})
         
         return JsonResponse({
             'success': True,

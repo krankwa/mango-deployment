@@ -15,6 +15,8 @@ from .views import (
     upload_image,
     export_dataset,
 )
+from django.conf import settings
+from django.conf.urls.static import static
 
 app_name = 'mangosense'
 
@@ -39,4 +41,4 @@ urlpatterns = [
     path('classified-images/bulk-update/', bulk_update_images, name='bulk_update_images'),
     path('upload-image/', upload_image, name='upload_image'),
     path('export-dataset/', export_dataset, name='export_dataset'),
-]
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

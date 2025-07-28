@@ -17,19 +17,26 @@ class UserProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at']
 
 class MangoImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
     user = UserSerializer(read_only=True)
-    
+
     class Meta:
         model = MangoImage
         fields = [
-            'id', 'user', 'image', 'original_filename', 'uploaded_at',
-            'predicted_class', 'confidence_score', 'disease_type',
-            'image_size', 'processing_time', 'client_ip'
+            'id', 'user', 'image', 'image_url', 'original_filename', 'predicted_class',
+            'confidence_score', 'uploaded_at', 'is_verified', 'notes', 'disease_classification',
+            'verified_by', 'verified_date'
         ]
         read_only_fields = [
             'id', 'uploaded_at', 'predicted_class', 'confidence_score',
-            'disease_type', 'image_size', 'processing_time', 'client_ip'
+            'disease_classification', 'image_size', 'processing_time', 'client_ip'
         ]
+
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if request is not None:
+            return request.build_absolute_uri(obj.image.url)
+        return obj.image.url if obj.image else None
 
 class MangoImageUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating MangoImage records"""
