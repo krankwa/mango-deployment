@@ -15,8 +15,7 @@ from .utils import (
     create_api_response
 )
 
-# Uncomment when TensorFlow is available
-#import tensorflow as tf
+import tensorflow as tf
 
 # ML Configuration
 IMG_SIZE = (224, 224)
@@ -40,18 +39,11 @@ treatment_suggestions = {
     'Stem End Rot': 'Proper post-harvest handling and storage conditions are essential.'
 }
 
-# Load ML model
-try:
-    if hasattr(settings, 'MODEL_PATH'):
-        model_path = str(settings.MODEL_PATH)
-        # Uncomment when TensorFlow is available
-        # model = tf.keras.models.load_model(model_path)
-        model = None  # For development without TensorFlow
-    else:
-        model = None
-except Exception as e:
-    model = None
-    print(f"Error loading model: {e}")
+# Model paths
+LEAF_MODEL_PATH = os.path.join(settings.BASE_DIR, 'models', 'leaf-efficientnetb0-model.keras')
+FRUIT_MODEL_PATH = os.path.join(settings.BASE_DIR, 'models', 'fruit-efficientnetb0-model.keras')
+
+
 
 def preprocess_image(image_file):
     """Preprocess image for ML model prediction"""
@@ -66,12 +58,8 @@ def preprocess_image(image_file):
     
     return img_array, original_size
 
-def get_mock_prediction():
-    """Get mock prediction for development without ML model"""
-    import random
-    # Simulate realistic prediction probabilities
-    predictions = np.random.dirichlet(np.ones(len(class_names)) * 0.5)
-    return predictions
+
+
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
@@ -86,11 +74,11 @@ def predict_image(request):
             ),
             status=400
         )
-    
+
     try:
         image_file = request.FILES['image']
         client_ip = get_client_ip(request)
-        
+
         # Validate image file using utils
         validation_errors = validate_image_file(image_file)
         if validation_errors:
@@ -102,34 +90,43 @@ def predict_image(request):
                 ),
                 status=400
             )
-        
+
         # Process image for prediction
         img_array, original_size = preprocess_image(image_file)
-        
+
         # Get prediction
-        if model is not None:
-            # Real ML prediction
-            # prediction = model.predict(img_array)
-            prediction = get_mock_prediction()  # Mock for development
+        detection_type = request.data.get('detection_type', 'leaf')  # default to 'leaf' if not provided
+
+        # Choose model path
+        if detection_type == 'fruit':
+            model_path = FRUIT_MODEL_PATH
+            model_used = 'fruit'
         else:
-            # Mock prediction for development
-            prediction = get_mock_prediction()
-        
+            model_path = LEAF_MODEL_PATH
+            model_used = 'leaf'
+
+        # Load the model dynamically
+        model = tf.keras.models.load_model(model_path)
+
+        # Real ML prediction
+        prediction = model.predict(img_array)
+        prediction = np.array(prediction).flatten()
+
         # Get prediction summary using utils
         prediction_summary = get_prediction_summary(prediction, class_names)
-        
+
         # Add treatment suggestions
         for pred in prediction_summary['top_3']:
             pred['treatment'] = treatment_suggestions.get(pred['disease'], "No treatment information available.")
-        
+
         # Save to database
         try:
             # Reset file pointer
             image_file.seek(0)
-            
+
             # Generate unique filename
             unique_filename = generate_unique_filename(image_file.name)
-            
+
             # Create MangoImage record
             mango_image = MangoImage.objects.create(
                 image=image_file,
@@ -143,19 +140,19 @@ def predict_image(request):
                 client_ip=get_client_ip(request),
                 notes=f"Predicted via mobile app with {prediction_summary['primary_prediction']['confidence']:.2f}% confidence"
             )
-            
+
             # Log prediction activity
             log_prediction_activity(request.user, mango_image.id, prediction_summary)
-            
+
             saved_image_id = mango_image.id
-            
+
         except Exception as e:
             print(f"Error saving image to database: {e}")
             saved_image_id = None
-        
+
         # Clear memory
         gc.collect()
-        
+
         # Create response data
         response_data = {
             'primary_prediction': {
@@ -172,13 +169,15 @@ def predict_image(request):
                 'total_diseases_checked': len(class_names)
             },
             'saved_image_id': saved_image_id,
+            'model_used': model_used,  # <-- Add this line
+            'model_path': model_path,  # <-- Optionally add the actual path
             'debug_info': {
-                'model_loaded': model is not None,
+                'model_loaded': True,
                 'image_size': original_size,
                 'processed_size': IMG_SIZE
             }
         }
-        
+
         return JsonResponse(
             create_api_response(
                 success=True,
@@ -186,7 +185,7 @@ def predict_image(request):
                 message='Image processed successfully'
             )
         )
-        
+
     except Exception as e:
         return JsonResponse(
             create_api_response(
