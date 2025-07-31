@@ -116,7 +116,7 @@ def predict_image(request):
         prediction_summary = get_prediction_summary(prediction, class_names)
 
         # Set confidence threshold
-        CONFIDENCE_THRESHOLD = 60.0
+        CONFIDENCE_THRESHOLD = 50.0
 
         # Check if top prediction is below threshold
         if prediction_summary['primary_prediction']['confidence'] < CONFIDENCE_THRESHOLD:
