@@ -115,6 +115,43 @@ def predict_image(request):
         # Get prediction summary using utils
         prediction_summary = get_prediction_summary(prediction, class_names)
 
+        # Set confidence threshold
+        CONFIDENCE_THRESHOLD = 60.0
+
+        # Check if top prediction is below threshold
+        if prediction_summary['primary_prediction']['confidence'] < CONFIDENCE_THRESHOLD:
+            unknown_response = {
+                'disease': 'Unknown',
+                'confidence': f"{prediction_summary['primary_prediction']['confidence']:.2f}%",
+                'confidence_score': prediction_summary['primary_prediction']['confidence'],
+                'confidence_level': 'Low',
+                'treatment': "The uploaded image could not be confidently classified. Please ensure the image is of a mango leaf or fruit and try again."
+            }
+            response_data = {
+                'primary_prediction': unknown_response,
+                'top_3_predictions': [],
+                'prediction_summary': {
+                    'most_likely': 'Unknown',
+                    'confidence_level': 'Low',
+                    'total_diseases_checked': len(class_names)
+                },
+                'saved_image_id': None,
+                'model_used': model_used,
+                'model_path': model_path,
+                'debug_info': {
+                    'model_loaded': True,
+                    'image_size': original_size,
+                    'processed_size': IMG_SIZE
+                }
+            }
+            return JsonResponse(
+                create_api_response(
+                    success=True,
+                    data=response_data,
+                    message='Could not confidently classify the image. Please upload a clear image of a mango leaf or fruit.'
+                )
+            )
+
         # Add treatment suggestions
         for pred in prediction_summary['top_3']:
             pred['treatment'] = treatment_suggestions.get(pred['disease'], "No treatment information available.")
