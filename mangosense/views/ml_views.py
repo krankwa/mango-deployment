@@ -241,7 +241,7 @@ def test_model_status(request):
         active_model = MLModel.objects.filter(is_active=True).first()
         
         model_status = {
-            'model_loaded': model is not None,
+            'model_loaded': active_model is not None,
             'model_path': str(settings.MODEL_PATH) if hasattr(settings, 'MODEL_PATH') else 'Not set',
             'class_names': class_names,
             'class_names_count': len(class_names),
