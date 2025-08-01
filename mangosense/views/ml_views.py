@@ -21,7 +21,7 @@ import tensorflow as tf
 IMG_SIZE = (224, 224)
 class_names = [
     'Anthracnose', 'Bacterial Canker', 'Cutting Weevil', 'Die Back', 'Gall Midge',
-    'Healthy', 'Powdery Mildew', 'Sooty Mould', 'Alternaria', 'Black Mould Rot', 'Stem End Rot'
+    'Healthy', 'Powdery Mildew', 'Sooty Mold', 'Black Mold Rot', 'Stem End Rot'
 ]
 
 # Treatment suggestions
@@ -33,9 +33,8 @@ treatment_suggestions = {
     'Gall Midge': 'Remove and destroy infested fruits; use appropriate insecticides.',
     'Healthy': 'No treatment needed. Maintain good agricultural practices.',
     'Powdery Mildew': 'Alternate spraying of Wettable sulphur 0.2 per cent at 15 days interval are recommended for effective control of the disease.',
-    'Sooty Mould': 'Pruning of affected branches and their prompt destruction followed by spraying of Wettasulf (0.2%) helps to control the disease.',
-    'Alternaria': 'Apply appropriate fungicides and remove infected plant material.',
-    'Black Mould Rot': 'Improve air circulation and apply fungicides as needed.',
+    'Sooty Mold': 'Pruning of affected branches and their prompt destruction followed by spraying of Wettasulf (0.2%) helps to control the disease.',
+    'Black Mold Rot': 'Improve air circulation and apply fungicides as needed.',
     'Stem End Rot': 'Proper post-harvest handling and storage conditions are essential.'
 }
 
@@ -97,13 +96,20 @@ def predict_image(request):
         # Get prediction
         detection_type = request.data.get('detection_type', 'leaf')  # default to 'leaf' if not provided
 
-        # Choose model path
+        # Choose model path and class names
         if detection_type == 'fruit':
             model_path = FRUIT_MODEL_PATH
             model_used = 'fruit'
+            model_class_names = [
+                'Anthracnose', 'Black Mold Rot', 'Healthy', 'Stem End Rot'
+            ]
         else:
             model_path = LEAF_MODEL_PATH
             model_used = 'leaf'
+            model_class_names = [
+                'Anthracnose', 'Bacterial Canker', 'Cutting Weevil', 'Die Back', 'Gall Midge',
+                'Healthy', 'Powdery Mildew', 'Sooty Mold', 'Black Mold Rot', 'Stem End Rot'
+            ]
 
         # Load the model dynamically
         model = tf.keras.models.load_model(model_path)
@@ -113,7 +119,7 @@ def predict_image(request):
         prediction = np.array(prediction).flatten()
 
         # Get prediction summary using utils
-        prediction_summary = get_prediction_summary(prediction, class_names)
+        prediction_summary = get_prediction_summary(prediction, model_class_names)
 
         # Set confidence threshold
         CONFIDENCE_THRESHOLD = 50.0
@@ -125,7 +131,8 @@ def predict_image(request):
                 'confidence': f"{prediction_summary['primary_prediction']['confidence']:.2f}%",
                 'confidence_score': prediction_summary['primary_prediction']['confidence'],
                 'confidence_level': 'Low',
-                'treatment': "The uploaded image could not be confidently classified. Please ensure the image is of a mango leaf or fruit and try again."
+                'treatment': "The uploaded image could not be confidently classified. Please ensure the image is of a mango leaf or fruit and try again.",
+                'detection_type': model_used
             }
             response_data = {
                 'primary_prediction': unknown_response,
@@ -133,7 +140,7 @@ def predict_image(request):
                 'prediction_summary': {
                     'most_likely': 'Unknown',
                     'confidence_level': 'Low',
-                    'total_diseases_checked': len(class_names)
+                    'total_diseases_checked': len(model_class_names)
                 },
                 'saved_image_id': None,
                 'model_used': model_used,
@@ -155,16 +162,12 @@ def predict_image(request):
         # Add treatment suggestions
         for pred in prediction_summary['top_3']:
             pred['treatment'] = treatment_suggestions.get(pred['disease'], "No treatment information available.")
+            pred['detection_type'] = model_used
 
         # Save to database
         try:
-            # Reset file pointer
             image_file.seek(0)
-
-            # Generate unique filename
             unique_filename = generate_unique_filename(image_file.name)
-
-            # Create MangoImage record
             mango_image = MangoImage.objects.create(
                 image=image_file,
                 original_filename=image_file.name,
@@ -177,37 +180,32 @@ def predict_image(request):
                 client_ip=get_client_ip(request),
                 notes=f"Predicted via mobile app with {prediction_summary['primary_prediction']['confidence']:.2f}% confidence"
             )
-
-            # Log prediction activity
             log_prediction_activity(request.user, mango_image.id, prediction_summary)
-
             saved_image_id = mango_image.id
-
         except Exception as e:
             print(f"Error saving image to database: {e}")
             saved_image_id = None
 
-        # Clear memory
         gc.collect()
 
-        # Create response data
         response_data = {
             'primary_prediction': {
                 'disease': prediction_summary['primary_prediction']['disease'],
                 'confidence': f"{prediction_summary['primary_prediction']['confidence']:.2f}%",
                 'confidence_score': prediction_summary['primary_prediction']['confidence'],
                 'confidence_level': prediction_summary['confidence_level'],
-                'treatment': treatment_suggestions.get(prediction_summary['primary_prediction']['disease'], "No treatment information available.")
+                'treatment': treatment_suggestions.get(prediction_summary['primary_prediction']['disease'], "No treatment information available."),
+                'detection_type': model_used
             },
             'top_3_predictions': prediction_summary['top_3'],
             'prediction_summary': {
                 'most_likely': prediction_summary['primary_prediction']['disease'],
                 'confidence_level': prediction_summary['confidence_level'],
-                'total_diseases_checked': len(class_names)
+                'total_diseases_checked': len(model_class_names)
             },
             'saved_image_id': saved_image_id,
-            'model_used': model_used,  # <-- Add this line
-            'model_path': model_path,  # <-- Optionally add the actual path
+            'model_used': model_used,
+            'model_path': model_path,
             'debug_info': {
                 'model_loaded': True,
                 'image_size': original_size,
