@@ -101,14 +101,14 @@ def predict_image(request):
             model_path = FRUIT_MODEL_PATH
             model_used = 'fruit'
             model_class_names = [
-                'Anthracnose', 'Black Mold Rot', 'Healthy', 'Stem End Rot'
+                'Anthracnose', 'Black Mold Rot', 'Healthy', 'Stem end Rot'
             ]
         else:
             model_path = LEAF_MODEL_PATH
             model_used = 'leaf'
             model_class_names = [
                 'Anthracnose', 'Bacterial Canker', 'Cutting Weevil', 'Die Back', 'Gall Midge',
-                'Healthy', 'Powdery Mildew', 'Sooty Mold', 'Black Mold Rot', 'Stem End Rot'
+                'Healthy', 'Powdery Mildew', 'Sooty Mold'
             ]
 
         # Load the model dynamically
