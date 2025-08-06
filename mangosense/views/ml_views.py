@@ -19,12 +19,18 @@ import tensorflow as tf
 
 # ML Configuration
 IMG_SIZE = (224, 224)
-class_names = [
+
+# Separate class names for each model type
+LEAF_CLASS_NAMES = [
     'Anthracnose', 'Bacterial Canker', 'Cutting Weevil', 'Die Back', 'Gall Midge',
-    'Healthy', 'Powdery Mildew', 'Sooty Mold', 'Black Mold Rot', 'Stem End Rot'
+    'Healthy', 'Powdery Mildew', 'Sooty Mold'
 ]
 
-# Treatment suggestions
+FRUIT_CLASS_NAMES = [
+    'Anthracnose', 'Black Mold Rot', 'Healthy', 'Stem End Rot'
+]
+
+# Treatment suggestions (keep all treatments)
 treatment_suggestions = {
     'Anthracnose': 'The diseased twigs should be pruned and burnt along with fallen leaves. Spraying twice with Carbendazim (Bavistin 0.1%) at 15 days interval during flowering controls blossom infection.',
     'Bacterial Canker': 'Three sprays of Streptocycline (0.01%) or Agrimycin-100 (0.01%) after first visual symptom at 10 day intervals are effective in controlling the disease.',
@@ -100,16 +106,11 @@ def predict_image(request):
         if detection_type == 'fruit':
             model_path = FRUIT_MODEL_PATH
             model_used = 'fruit'
-            model_class_names = [
-                'Anthracnose', 'Black Mold Rot', 'Healthy', 'Stem end Rot'
-            ]
+            model_class_names = FRUIT_CLASS_NAMES
         else:
             model_path = LEAF_MODEL_PATH
             model_used = 'leaf'
-            model_class_names = [
-                'Anthracnose', 'Bacterial Canker', 'Cutting Weevil', 'Die Back', 'Gall Midge',
-                'Healthy', 'Powdery Mildew', 'Sooty Mold'
-            ]
+            model_class_names = LEAF_CLASS_NAMES
 
         # Load the model dynamically
         model = tf.keras.models.load_model(model_path)
@@ -241,8 +242,10 @@ def test_model_status(request):
         model_status = {
             'model_loaded': active_model is not None,
             'model_path': str(settings.MODEL_PATH) if hasattr(settings, 'MODEL_PATH') else 'Not set',
-            'class_names': class_names,
-            'class_names_count': len(class_names),
+            'leaf_class_names': LEAF_CLASS_NAMES,
+            'fruit_class_names': FRUIT_CLASS_NAMES,
+            'leaf_classes_count': len(LEAF_CLASS_NAMES),
+            'fruit_classes_count': len(FRUIT_CLASS_NAMES),
             'treatment_suggestions_count': len(treatment_suggestions),
             'active_model': {
                 'name': active_model.name if active_model else None,
@@ -265,7 +268,8 @@ def test_model_status(request):
                 success=True,
                 data={
                     'model_status': model_status,
-                    'available_diseases': class_names,
+                    'available_leaf_diseases': LEAF_CLASS_NAMES,
+                    'available_fruit_diseases': FRUIT_CLASS_NAMES,
                     'database_stats': database_stats
                 },
                 message='Model status retrieved successfully'
