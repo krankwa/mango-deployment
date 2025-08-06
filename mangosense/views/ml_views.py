@@ -52,7 +52,7 @@ def preprocess_image(image_file):
     img_array = np.array(img)
     
     # Uncomment when TensorFlow is available
-    # img_array = tf.keras.applications.efficientnet.preprocess_input(img_array)
+    img_array = tf.keras.applications.efficientnet.preprocess_input(img_array)
     img_array = np.expand_dims(img_array, axis=0)
     
     return img_array, original_size
