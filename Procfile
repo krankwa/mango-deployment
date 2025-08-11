@@ -1,0 +1,1 @@
+﻿web: python manage.py migrate && gunicorn mangoAPI.wsgi:application --bind 0.0.0.0:$PORT
