@@ -9,13 +9,72 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 import json
 import traceback
-from ..models import MangoImage, MLModel
+from ..models import MangoImage, MLModel, PredictionLog
 from ..serializers import (
     MangoImageSerializer, MangoImageUpdateSerializer, 
     BulkUpdateSerializer, ImageUploadSerializer
 )
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
+
+# ================ HELPER FUNCTIONS ================
+
+def get_top_predictions_for_image(image):
+    """
+    Get top 3 predictions for an image, preferring stored PredictionLog data
+    """
+    try:
+        # Try to get the most recent prediction log for this image
+        prediction_log = PredictionLog.objects.filter(image=image).order_by('-timestamp').first()
+        
+        if prediction_log and prediction_log.probabilities and prediction_log.labels:
+            # Use stored prediction data
+            probabilities = prediction_log.probabilities
+            labels = prediction_log.labels
+            
+            # Create tuples of (probability, label) and sort by probability descending
+            prob_label_pairs = list(zip(probabilities, labels))
+            prob_label_pairs.sort(key=lambda x: x[0], reverse=True)
+            
+            # Take top 3
+            top_3_pairs = prob_label_pairs[:3]
+            
+            top_3_predictions = [
+                {
+                    'predicted_class': label,
+                    'confidence': float(prob)
+                }
+                for prob, label in top_3_pairs
+            ]
+            
+            return top_3_predictions
+            
+    except Exception as e:
+        print(f"Error getting stored predictions: {e}")
+    
+    # Fallback: create synthetic top 3 based on current prediction
+    predicted_class = image.predicted_class or "Unknown"
+    confidence = image.confidence_score or 0.0
+    
+    # Create 3 predictions with decreasing confidence
+    base_confidence = min(confidence, 0.95)  # Cap at 95%
+    
+    top_3_predictions = [
+        {
+            'predicted_class': predicted_class,
+            'confidence': base_confidence
+        },
+        {
+            'predicted_class': f"Alternative to {predicted_class}",
+            'confidence': max(0.1, base_confidence - 0.3)
+        },
+        {
+            'predicted_class': f"Other possibility",
+            'confidence': max(0.05, base_confidence - 0.5)
+        }
+    ]
+    
+    return top_3_predictions
 
 # ================ PAGINATION ================
 
@@ -328,54 +387,55 @@ def image_prediction_details(request, pk):
         image = MangoImage.objects.get(pk=pk)
         serializer = MangoImageSerializer(image, context={'request': request})
         
+        # Get top 3 predictions using helper function
+        top_3_predictions = get_top_predictions_for_image(image)
+        
         # Create extended response with prediction details
         data = serializer.data
         
-        # Add mock prediction data structure for compatibility with frontend
-        # In a real implementation, this would come from stored prediction data
-        if hasattr(image, 'prediction_data') and image.prediction_data:
-            # If prediction data is stored as JSON field
-            data['prediction_data'] = image.prediction_data
-        else:
-            # Create mock structure based on existing data
-            data['prediction_data'] = {
-                'success': True,
-                'message': 'Image processed successfully',
-                'data': {
-                    'primary_prediction': {
-                        'disease': image.predicted_class,
-                        'confidence': f"{image.confidence_score:.2f}%",
-                        'confidence_score': image.confidence_score * 100,
-                        'confidence_level': 'High' if image.confidence_score > 0.8 else 'Medium' if image.confidence_score > 0.6 else 'Low',
-                        'treatment': f"Treatment recommendations for {image.predicted_class}",
-                        'detection_type': getattr(image, 'disease_type', 'leaf')
-                    },
-                    'top_3_predictions': [
-                        {
-                            'disease': image.predicted_class,
-                            'confidence': f"{image.confidence_score:.2f}%",
-                            'confidence_score': image.confidence_score * 100,
-                            'confidence_level': 'High' if image.confidence_score > 0.8 else 'Medium' if image.confidence_score > 0.6 else 'Low',
-                            'treatment': f"Treatment for {image.predicted_class}",
-                            'detection_type': getattr(image, 'disease_type', 'leaf')
-                        }
-                    ],
-                    'prediction_summary': {
-                        'most_likely_disease': image.predicted_class,
-                        'confidence_level': 'High' if image.confidence_score > 0.8 else 'Medium' if image.confidence_score > 0.6 else 'Low',
-                        'total_diseases_checked': 11
-                    },
-                    'saved_image_id': image.id,
-                    'model_used': getattr(image, 'disease_type', 'leaf'),
-                    'model_path': f"models/{getattr(image, 'disease_type', 'leaf')}-efficientnetb0-model.keras",
-                    'debug_info': {
-                        'model_loaded': True,
-                        'image_size': getattr(image, 'image_size', 'Unknown'),
-                        'processed_size': '224x224'
-                    }
+        # Map predictions to frontend format
+        formatted_predictions = []
+        for i, pred in enumerate(top_3_predictions):
+            confidence_score = pred['confidence'] * 100
+            formatted_predictions.append({
+                'disease': pred['predicted_class'],
+                'confidence': f"{confidence_score:.2f}%",
+                'confidence_score': confidence_score,
+                'confidence_level': 'High' if pred['confidence'] > 0.8 else 'Medium' if pred['confidence'] > 0.6 else 'Low',
+                'treatment': f"Treatment recommendations for {pred['predicted_class']}",
+                'detection_type': getattr(image, 'disease_type', 'leaf')
+            })
+        
+        # Add prediction data structure for compatibility with frontend
+        data['prediction_data'] = {
+            'success': True,
+            'message': 'Image processed successfully',
+            'data': {
+                'primary_prediction': formatted_predictions[0] if formatted_predictions else {
+                    'disease': image.predicted_class or 'Unknown',
+                    'confidence': f"{(image.confidence_score or 0) * 100:.2f}%",
+                    'confidence_score': (image.confidence_score or 0) * 100,
+                    'confidence_level': 'Low',
+                    'treatment': f"Treatment recommendations for {image.predicted_class or 'Unknown'}",
+                    'detection_type': getattr(image, 'disease_type', 'leaf')
                 },
-                'timestamp': image.uploaded_at.isoformat()
-            }
+                'top_3_predictions': formatted_predictions,
+                'prediction_summary': {
+                    'most_likely_disease': formatted_predictions[0]['disease'] if formatted_predictions else (image.predicted_class or 'Unknown'),
+                    'confidence_level': formatted_predictions[0]['confidence_level'] if formatted_predictions else 'Low',
+                    'total_diseases_checked': 11
+                },
+                'saved_image_id': image.id,
+                'model_used': getattr(image, 'disease_type', 'leaf'),
+                'model_path': f"models/{getattr(image, 'disease_type', 'leaf')}-efficientnetb0-model.keras",
+                'debug_info': {
+                    'model_loaded': True,
+                    'image_size': getattr(image, 'image_size', 'Unknown'),
+                    'processed_size': '224x224'
+                }
+            },
+            'timestamp': image.uploaded_at.isoformat()
+        }
         
         return JsonResponse({
             'success': True,

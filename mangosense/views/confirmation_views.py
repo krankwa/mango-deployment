@@ -25,6 +25,7 @@ def save_user_confirmation(request):
         
         print(f"🔍 Extracted fields - image_id: {image_id}, is_correct: {is_correct}, predicted_disease: {predicted_disease}")
         
+        
         if image_id is None or is_correct is None or not predicted_disease:
             missing_fields = []
             if image_id is None:

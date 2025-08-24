@@ -56,8 +56,15 @@ class PredictionLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     client_ip = models.GenericIPAddressField()
     user_agent = models.TextField(blank=True)
-    response_time = models.FloatField()
+    response_time = models.FloatField(null=True, blank=True)
+
+    #persist prediction outputs
+    probabilities = models.JSONField(null=True, blank=True)
+    labels = models.JSONField(null=True, blank=True)
+    prediction_summary = models.JSONField(null=True, blank=True)
+    raw_response = models.JSONField(null=True, blank=True)
     
+
     class Meta:
         ordering = ['-timestamp']
     

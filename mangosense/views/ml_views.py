@@ -7,7 +7,7 @@ from PIL import Image
 import numpy as np
 import os
 import gc
-from ..models import MangoImage, MLModel
+from ..models import MangoImage, MLModel, PredictionLog
 from .utils import (
     get_client_ip, validate_image_file, get_disease_type,
     calculate_confidence_level, get_prediction_summary,
@@ -74,6 +74,8 @@ def preprocess_image(image_file):
 @parser_classes([MultiPartParser, FormParser])
 def predict_image(request):
     """Handle image prediction from mobile Ionic app"""
+    import time
+    start_time = time.time()
     
     # Add debug logging
     print(f"DEBUG: Received prediction request from {get_client_ip(request)}")
@@ -187,7 +189,7 @@ def predict_image(request):
         prediction_summary = get_prediction_summary(prediction, model_class_names)
 
         # Set confidence threshold
-        CONFIDENCE_THRESHOLD = 50.0
+        CONFIDENCE_THRESHOLD = 20.0
 
         # Check if top prediction is below threshold
         if prediction_summary['primary_prediction']['confidence'] < CONFIDENCE_THRESHOLD:
@@ -279,6 +281,22 @@ def predict_image(request):
                 'processed_size': IMG_SIZE
             }
         }
+        try:
+            probs_list = prediction.tolist() if hasattr(prediction, 'tolist') else list(map(float, prediction))
+            labels_list = model_class_names
+            response_time = time.time() - start_time
+            PredictionLog.objects.create(
+                image=mango_image if 'mango_image' in locals() else None,
+                client_ip=get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                response_time=response_time,
+                probabilities=probs_list,
+                labels=labels_list,
+                prediction_summary=prediction_summary,
+                raw_response=response_data
+            )
+        except Exception as e:
+            print(f"DEBUG: Failed to save PredictionLog: {e}")
 
         print(f"DEBUG: Returning successful response for {prediction_summary['primary_prediction']['disease']}")
         return JsonResponse(
